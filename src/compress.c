@@ -20,16 +20,6 @@ u8 *writeLzCommand(u8 *dest, u8 cmd, size_t size) {
     return dest;
 }
 
-u8 *checkLiteral(u8 *dest, const u8 *src, const u8 *lastsrc) {
-    if (src > lastsrc) {
-        size_t diff = src - lastsrc;
-        dest = writeLzCommand(dest, LZ_LITERAL, diff);
-        memcpy(dest, src, diff);
-        dest += diff;
-    }
-    return dest;
-}
-
 struct LzRW arrmax(int *array, size_t size) {
     struct LzRW output = {};
     for (int i = 0; i < size; i ++) {
@@ -44,7 +34,8 @@ struct LzRW arrmax(int *array, size_t size) {
 int scoreLzIterate(const u8 *src, const u8 *end) {
     int cnt = 1;
     char iterval = *src++;
-    while (src < end && *src++ == iterval) cnt++;
+    if (iterval != 0)
+        while (src < end && *src++ == iterval) cnt++;
     return cnt;
 }
 
@@ -98,11 +89,9 @@ size_t lz(u8 *dest, const u8 *src, size_t insize) {
     const u8 *end = src + insize;
     const u8 *lastsrc = src;
     u8 *initdest = dest;
-    int literalScore = 0;
     int iterateScore = 0;
     int alternateScore = 0;
     int zeroScore = 0;
-    int whichCommand;
     int offset;
     int offsets[3] = {};
     struct LzRW repeatScore = {};
@@ -111,14 +100,13 @@ size_t lz(u8 *dest, const u8 *src, size_t insize) {
     struct LzRW finalScore = {};
     int scores[7] = {};
     while (cursrc < end) {
-        literalScore ++;
         iterateScore = scoreLzIterate(cursrc, end);
         alternateScore = scoreLzAlternate(cursrc, end);
         zeroScore = scoreLzZero(cursrc, end);
         repeatScore = scoreLzRepeat(cursrc, src, end);
         flipScore = scoreLzFlip(cursrc, src, end);
         reverseScore = scoreLzReverse(cursrc, src, end);
-        scores[LZ_LITERAL] = literalScore;
+        scores[LZ_LITERAL] = cursrc - lastsrc;
         scores[LZ_ITERATE] = iterateScore;
         scores[LZ_ALTERNATE] = alternateScore;
         scores[LZ_ZERO] = zeroScore;
@@ -128,13 +116,16 @@ size_t lz(u8 *dest, const u8 *src, size_t insize) {
         offsets[LZ_REPEAT - LZ_RW] = repeatScore.offset;
         offsets[LZ_FLIP - LZ_RW] = flipScore.offset;
         offsets[LZ_REVERSE - LZ_RW] = reverseScore.offset;
-        finalScore = arrmax(scores, sizeof scores);
-        if (finalScore.offset == LZ_LITERAL)
+        finalScore = arrmax(scores, 7);
+        if (finalScore.offset == LZ_LITERAL) {
             cursrc++;
+        }
         else {
-            dest = checkLiteral(dest, cursrc, lastsrc);
-            lastsrc = cursrc;
-            literalScore = 0;
+            if (cursrc > lastsrc) {
+                dest = writeLzCommand(dest, LZ_LITERAL, cursrc - lastsrc);
+                memcpy(dest, cursrc, cursrc - lastsrc);
+                dest += cursrc - lastsrc;
+            }
             dest = writeLzCommand(dest, finalScore.offset, finalScore.score);
             if (finalScore.offset >= LZ_RW) {
                 offset = offsets[finalScore.offset - LZ_RW];
@@ -151,7 +142,13 @@ size_t lz(u8 *dest, const u8 *src, size_t insize) {
                 *dest++ = *cursrc--;
             }
             cursrc += finalScore.score;
+            lastsrc = cursrc;
         }
+    }
+    if (cursrc > lastsrc) {
+        dest = writeLzCommand(dest, LZ_LITERAL, cursrc - lastsrc);
+        memcpy(dest, cursrc, cursrc - lastsrc);
+        dest += cursrc - lastsrc;
     }
     *dest++ = LZ_END;
     return dest - initdest;
