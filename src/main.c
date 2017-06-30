@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <ntsid.h>
 #include <memory.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "macros.h"
 
 size_t unlz(u8 *dest, const u8 *src, size_t insize)
@@ -13,25 +15,50 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
     const u8 *initsrc;
     u8 *initdst;
     u8 *rwsrc;
-    s8 offset;
+    s32 offset;
     u8 flipout;
     u8 j;
     size_t outsize;
+    bool is_rw;
+    bool is_long;
+    bool is_fwd;
+    u8 iterval;
 
     initsrc = src;
     initdst = dest;
     outsize = 0;
     while ((rval = *src++) != 0xff && (outsize < 0x2000) && (src - initsrc < insize)) {
         cmd = rval >> 5;
-        if (cmd == LZ_LONG) {
+        is_long = cmd == LZ_LONG;
+        if (is_long) {
             cmd = (rval >> 2) & 0x07;
             size = (((rval & 0x03) << 8) | *src++) + 1;
         } else {
             size = (rval & 0x1f) + 1;
         }
-        if (cmd & LZ_RW) {
+        is_rw = ((cmd & LZ_RW) != 0);
+        if (is_rw) {
             offset = *src++;
-            rwsrc = offset >= 0 ? initdst + offset : dest - (offset & 0x7f);
+            if (offset & 0x80)
+            {
+                is_fwd = false;
+                offset = ~(offset & 0x7f);
+                rwsrc = dest + offset;
+            }
+            else {
+                is_fwd = true;
+                offset <<= 8;
+                offset |= (*src++);
+                rwsrc = initdst + offset;
+            }
+            if (rwsrc >= dest) {
+                printf("Error in calculating offset!\n"
+                           "dest = %p\n"
+                           "rwsrc = %p\n"
+                           "offset = 0x%04x\n"
+                           "direction = %s\n", &dest, &rwsrc, offset, is_fwd ? "forward" : "reverse");
+                exit(1);
+            }
         } else {
             rwsrc = NULL;
         }
@@ -42,14 +69,15 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
                 src += size;
                 break;
             case LZ_ITERATE:
-                memset(dest, *src++, size);
+                memset(dest, (iterval = *src++), size);
                 dest += size;
                 break;
             case LZ_ALTERNATE:
                 altset = 1;
                 for (i=0; i<size; i++)
                 {
-                    *dest++ = *(src += altset);
+                    *dest++ = *src;
+                    src += altset;
                     altset = -altset;
                 }
                 if (altset == 1) src++;
@@ -61,8 +89,8 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
                 break;
             default:
             case LZ_REPEAT:
-                memcpy(dest, rwsrc, size);
-                dest += size;
+                for (i=0; i<size; i++)
+                    *dest++ = *rwsrc++;
                 break;
             case LZ_FLIP:
                 for (i=0; i<size; i++) {
@@ -90,8 +118,6 @@ size_t lz(u8 *dest, const u8 *src, size_t insize) {
 
 int main(int argc, char *argv[])
 {
-    u8 *src;
-    u8 *dest;
     u8 *decompend;
     FILE *infile;
     FILE *outfile;
@@ -123,17 +149,12 @@ int main(int argc, char *argv[])
     fseek(infile, 0, SEEK_END);
     fsize = ftell(infile);
     fseek(infile, 0, SEEK_SET);
-    dest = malloc(0x2000);
-    src = malloc(fsize);
+    u8 src[fsize];
+    u8 dest[0x2000];
     fread(src, 1, fsize, infile);
     fclose(infile);
-    if ((osize = method(dest, src, fsize)) <= fsize) {
-        printf("Packed size exceeds unpacked size!\n");
-        exit(1);
-    }
+    osize = method(dest, src, fsize);
     fwrite(dest, 1, osize, outfile);
     fclose(outfile);
-    free(src);
-    free(dest);
     return 0;
 }
