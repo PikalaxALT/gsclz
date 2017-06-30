@@ -32,6 +32,9 @@ enum LzCommands {
 };
 
 #define LZ_RW 0x04
+#define LZ_MAX_SIZE (1 << 10)
+#define LZ_MAX_SHORT (1 << 5)
+#define LZ_END 0xff
 
 struct LzCommandShort {
     u8 size:5;

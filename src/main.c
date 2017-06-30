@@ -4,30 +4,31 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include "macros.h"
+#include "compress.h"
+#include "utils.h"
 
 size_t unlz(u8 *dest, const u8 *src, size_t insize)
 {
     u8 rval;
     u8 cmd;
-    s8 altset;
     int i;
     size_t size;
     const u8 *initsrc;
     u8 *initdst;
     u8 *rwsrc;
     s32 offset;
-    u8 flipout;
-    u8 j;
     size_t outsize;
     bool is_rw;
     bool is_long;
     bool is_fwd;
     u8 iterval;
+    u8 altervals[2];
 
     initsrc = src;
     initdst = dest;
     outsize = 0;
-    while ((rval = *src++) != 0xff && (outsize < 0x2000) && (src - initsrc < insize)) {
+    while ((rval = *src++) != LZ_END && (outsize < 0x2000) && (src - initsrc < insize)) {
+        offset = -1;
         cmd = rval >> 5;
         is_long = cmd == LZ_LONG;
         if (is_long) {
@@ -64,61 +65,56 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
         }
         switch (cmd) {
             case LZ_LITERAL:
+                printf("LZ_LITERAL %zu\n", size);
                 memcpy(dest, src, size);
                 dest += size;
                 src += size;
                 break;
             case LZ_ITERATE:
-                memset(dest, (iterval = *src++), size);
+                iterval = *src++;
+                printf("LZ_ITERATE 0x%02X, %zu\n", iterval, size);
+                memset(dest, iterval, size);
                 dest += size;
                 break;
             case LZ_ALTERNATE:
-                altset = 1;
+                altervals[0] = *src++;
+                altervals[1] = *src++;
+                printf("LZ_ALTERNATE 0x%02X, 0x%02X, %zu\n", altervals[0], altervals[1], size);
                 for (i=0; i<size; i++)
                 {
-                    *dest++ = *src;
-                    src += altset;
-                    altset = -altset;
+                    *dest++ = altervals[i % 2];
                 }
-                if (altset == 1) src++;
-                src++;
                 break;
             case LZ_ZERO:
+                printf("LZ_ZERO %zu\n", size);
                 memset(dest, 0, size);
                 dest += size;
                 break;
             default:
             case LZ_REPEAT:
+                printf("LZ_REPEAT %d, %zu\n", offset, size);
                 for (i=0; i<size; i++)
                     *dest++ = *rwsrc++;
                 break;
             case LZ_FLIP:
-                for (i=0; i<size; i++) {
-                    flipout = 0;
-                    for (j=0; j<8; j++) {
-                        flipout |= (((*rwsrc) & (1 << j)) >> j) << (7 - j);
-                    }
-                    rwsrc++;
-                    *dest++ = flipout;
-                }
+                printf("LZ_FLIP %d, %zu\n", offset, size);
+                for (i=0; i<size; i++)
+                    *dest++ = bflp(*rwsrc++);
                 break;
             case LZ_REVERSE:
+                printf("LZ_REVERSE %d, %zu\n", offset, size);
                 for (i=0; i<size; i++)
                     *dest++ = *rwsrc--;
                 break;
         }
         outsize += size;
     }
+    printf("LZ_END\n");
     return outsize;
-}
-
-size_t lz(u8 *dest, const u8 *src, size_t insize) {
-    return 0;
 }
 
 int main(int argc, char *argv[])
 {
-    u8 *decompend;
     FILE *infile;
     FILE *outfile;
     size_t fsize;
