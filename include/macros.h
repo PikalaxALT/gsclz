@@ -36,22 +36,4 @@ enum LzCommands {
 #define LZ_MAX_SHORT (1 << 5)
 #define LZ_END 0xff
 
-struct LzCommandShort {
-    u8 size:5;
-    u8 cmd:3;
-};
-
-struct LzCommandLong {
-    u16 size:10;
-    u16 cmd:3;
-    u16 longident:3;
-};
-
-#define LZCMD_LITERAL(size) {\
-if (size < 32)\
-    LzCommandShort(size, LZ_LITERAL);\
-else\
-    LzCommandLong(size, LZ_LITERAL, LZ_LONG);\
-}
-
 #endif //GSCLZ_MACROS_H
