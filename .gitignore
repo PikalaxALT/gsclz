@@ -50,3 +50,11 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Local objects
+*.bin
+*.2bpp
+*.lz
+cmake-build-debug/
+*.txt
+*.sh
