@@ -37,9 +37,8 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
         if (is_long) {
             cmd = (rval >> 2) & 0x07;
             size = (((rval & 0x03) << 8) | *src++) + 1;
-        } else {
+        } else
             size = (rval & 0x1f) + 1;
-        }
         is_rw = ((cmd & LZ_RW) != 0);
         if (is_rw) {
             offset = *src++;
@@ -63,54 +62,51 @@ size_t unlz(u8 *dest, const u8 *src, size_t insize)
                            "direction = %s\n", &dest, &rwsrc, offset, is_fwd ? "forward" : "reverse");
                 exit(1);
             }
-        } else {
+        } else
             rwsrc = NULL;
-        }
+        printf("%s %zu", CommandStrings[cmd], size);
         switch (cmd) {
             case LZ_LITERAL:
-                printf("LZ_LITERAL %zu\n", size);
                 memcpy(dest, src, size);
                 dest += size;
                 src += size;
                 break;
             case LZ_ITERATE:
                 iterval = *src++;
-                printf("LZ_ITERATE %zu, 0x%02X\n", size, iterval);
+                printf(", 0x%02X", iterval);
                 memset(dest, iterval, size);
                 dest += size;
                 break;
             case LZ_ALTERNATE:
                 altervals[0] = *src++;
                 altervals[1] = *src++;
-                printf("LZ_ALTERNATE, %zu 0x%02X, 0x%02X\n", size, altervals[0], altervals[1]);
+                printf(", 0x%02X, 0x%02X", altervals[0], altervals[1]);
                 for (i=0; i<size; i++)
-                {
                     *dest++ = altervals[i % 2];
-                }
                 break;
             case LZ_ZERO:
-                printf("LZ_ZERO %zu\n", size);
                 memset(dest, 0, size);
                 dest += size;
                 break;
             default:
             case LZ_REPEAT:
-                printf("LZ_REPEAT %zu, %d\n", size, offset);
+                printf(", %d", offset);
                 for (i=0; i<size; i++)
                     *dest++ = *rwsrc++;
                 break;
             case LZ_FLIP:
-                printf("LZ_FLIP %zu, %d\n", size, offset);
+                printf(", %d", offset);
                 for (i=0; i<size; i++)
                     *dest++ = bflp(*rwsrc++);
                 break;
             case LZ_REVERSE:
-                printf("LZ_REVERSE %zu, %d\n", size, offset);
+                printf(", %d", offset);
                 for (i=0; i<size; i++)
                     *dest++ = *rwsrc--;
                 break;
         }
         outsize += size;
+        printf(" # %zu\n", outsize);
     }
     printf("LZ_END\n");
     return outsize;

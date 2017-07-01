@@ -7,5 +7,6 @@
 
 extern const char *const CommandStrings[];
 unsigned char bflp(unsigned char);
+void sortwargs(int *, int *, size_t, bool);
 
 #endif //GSCLZ_UTILS_H

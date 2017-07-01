@@ -4,6 +4,7 @@
 #endif
 #include <memory.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "macros.h"
 #include "utils.h"
 #include "decompress.h"
