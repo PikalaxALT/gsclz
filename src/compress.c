@@ -62,6 +62,93 @@ u8 *writeLzCommand(u8 *dest, u8 cmd, size_t size, int offset, const u8 *src, con
     return dest;
 }
 
+struct LzCommand createLzCommand(u8 type, size_t size, int offset, const u8 *src, const u8 *cursrc) {
+    struct LzCommand command;
+    command.type = type;
+    command.size = size;
+    switch (type) {
+        case LZ_LITERAL:
+            command.data.literal = src;
+            break;
+        case LZ_ITERATE:
+            command.data.iterate = cursrc[0];
+            break;
+        case LZ_ALTERNATE:
+            command.data.alternate[0] = cursrc[0];
+            command.data.alternate[1] = cursrc[1];
+            break;
+        case LZ_ZERO:
+        case LZ_END:
+            break;
+        case LZ_REPEAT:
+        case LZ_FLIP:
+        case LZ_REVERSE:
+            if (checkOffsetWidth(cursrc, src, offset) == 1)
+                offset += src - cursrc;
+            command.data.offset = offset; // The structs are all identical here.
+            break;
+    }
+    return command;
+}
+
+size_t makeLzCommandsReverse(u8 *dest, const struct LzCommand *commands, size_t ncommands) {
+    size_t outputsize = 0;
+    size_t inputsize = 0;
+    for (int i = ncommands - 1; i >= 0; i --)
+    {
+        outputsize++;
+        if (commands[i].type == LZ_END) {
+            printf("LZ_END\n");
+            *dest++ = LZ_END;
+            break;
+        }
+        if (commands[i].size > LZ_MAX_SHORT) {
+            *dest++ = (LZ_LONG << 5) | (commands[i].type << 2) | ((commands[i].size >> 8) & 3);
+            *dest++ = commands[i].size;
+            outputsize++;
+        } else {
+            *dest++ = (commands[i].type << 5) | commands[i].size;
+        }
+        printf("%s %zu", CommandStrings[commands[i].type], commands[i].size);
+        switch (commands[i].type) {
+            case LZ_LITERAL:
+                memcpy(dest, commands[i].data.literal, commands[i].size);
+                dest += commands[i].size;
+                outputsize += commands[i].size;
+                break;
+            case LZ_ITERATE:
+                printf(", 0x%02X", commands[i].data.iterate);
+                *dest++ = commands[i].data.iterate;
+                outputsize ++;
+                break;
+            case LZ_ALTERNATE:
+                printf(", 0x%02X, 0x%02X", commands[i].data.alternate[0], commands[i].data.alternate[1]);
+                *dest++ = commands[i].data.alternate[0];
+                *dest++ = commands[i].data.alternate[1];
+                outputsize += 2;
+                break;
+            case LZ_ZERO:
+                break;
+            case LZ_REPEAT:
+            case LZ_FLIP:
+            case LZ_REVERSE:
+                printf(", %d", commands[i].data.offset);
+                if (commands[i].data.offset < 0)
+                    *dest++ = (~commands[i].data.offset) | 0x80;
+                else {
+                    *dest++ = (commands[i].data.offset >> 8);
+                    *dest++ = commands[i].data.offset;
+                    outputsize++;
+                }
+                outputsize++;
+                break;
+        }
+        inputsize += commands[i].size;
+        printf(" # %zu\n", inputsize);
+    }
+    return outputsize;
+}
+
 struct LzRW arrmax(int *array, size_t size) {
     struct LzRW output = {.score = -1};
     for (int i = 0; i < size; i ++) {
